@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from metadrive.engine.logger import set_log_level
-from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
+from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback, EvalCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.ppo import PPO
@@ -243,39 +243,31 @@ def run_generalization_experiment(map_count, seed=42):
         }
         
 
-        def create_train_env_with_config(train_env_config):
-            def _make_env():
-                return get_training_env(train_env_config)
-            return _make_env
+        def get_training_env_with_scenes(extra_config=None):
+            config = {"num_scenarios": scene_count}
+            if extra_config:
+                config.update(extra_config)
+            return get_training_env(config)
         
         # vreate environments
         train_env = make_vec_env(
-            remove_reset_seed_and_add_monitor(
-                create_train_env_with_config(train_env_config), 
-                trial_dir
-            ), 
+            remove_reset_seed_and_add_monitor(get_training_env_with_scenes, trial_dir), 
             n_envs=num_train_envs,
-            vec_env_cls=SubprocVecEnv,
-            seed=seed
+            vec_env_cls=SubprocVecEnv
         )
-        
-        #  validation environment for evaluation
+
+        # validation environment for evaluation
         eval_val_env = make_vec_env(
             remove_reset_seed_and_add_monitor(get_validation_env, trial_dir), 
             n_envs=num_eval_envs,
-            vec_env_cls=SubprocVecEnv,
-            seed=seed+1
+            vec_env_cls=SubprocVecEnv
         )
 
-        # training environment for evaluation
+        # training environment for evaluation (same as train_env but fewer parallel environments)
         eval_train_env = make_vec_env(
-            remove_reset_seed_and_add_monitor(
-                create_train_env_with_config(train_env_config),  # Use this instead of lambda
-                trial_dir
-            ), 
+            remove_reset_seed_and_add_monitor(get_training_env_with_scenes, trial_dir), 
             n_envs=num_eval_envs,
-            vec_env_cls=SubprocVecEnv,
-            seed=seed+2
+            vec_env_cls=SubprocVecEnv
         )
         
         # Setup callbacks
@@ -414,10 +406,6 @@ def run_generalization_experiment(map_count, seed=42):
     return all_results
 
 def evaluate_with_metrics(model, env, n_episodes=20):
-    """
-    Evaluate the model and collect metrics like route_completion.
-    """
-    # Reset metrics
     metrics = defaultdict(list)
     
     for _ in range(n_episodes):
@@ -429,9 +417,7 @@ def evaluate_with_metrics(model, env, n_episodes=20):
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             
-            # When episode completes, collect metrics from info
             if done:
-                # Extract the info from the first environment (in case of vectorized)
                 if isinstance(info, dict):
                     episode_info = info
                 else:
