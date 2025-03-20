@@ -15,7 +15,7 @@ conda update -n base -c defaults conda
 conda env create -f environment.yml
 conda activate cs260r_miniproject
 
-pip install PyYAML  
+pip install PyYAML tdqm numpy rich tensorboard stable_baselines3
 
 
 # To test the env:

@@ -36,29 +36,38 @@ def run_ablation_experiment(grid_id):
     Args:
         grid_id (int): ID of the hyperparameter grid to use (1, 2, or 3)
     """
-    # Define three different hyperparameter grids
+    # Define enhanced grids to explore more parameters
     
-    # Uncomment the grid you want to use for this instance:
-    
-    # Grid 1: Learning Rate and Batch Size
+    # Grid 1: Network Architecture Exploration
     if grid_id == 1:
         param_grid = {
-            'learning_rate': [0.00005, 0.0001, 0.0003],
-            'batch_size': [32, 64, 128]
+            'policy_arch': [
+                # Default architecture
+                [dict(pi=[64, 64], vf=[64, 64])],
+                # Deeper architecture
+                [dict(pi=[128, 128], vf=[128, 128])],
+                # Asymmetric architecture (deeper policy)
+                [dict(pi=[128, 128, 64], vf=[64, 64])]
+            ],
+            'activation_fn': [
+                torch.nn.ReLU,
+                torch.nn.Tanh
+            ]
         }
     
-    # Grid 2: Network Architecture and Entropy Coefficient
+    # Grid 2: Value Function Parameters
     elif grid_id == 2:
         param_grid = {
-            'n_steps': [64, 128, 256],
-            'ent_coef': [0.0, 0.01, 0.03]
+            'clip_range_vf': [None, 0.1, 0.2, 0.4],
+            'vf_coef': [0.1, 0.5, 1.0]
         }
     
-    # Grid 3: Policy Parameters
+    # Grid 3: Advanced Stability Parameters
     elif grid_id == 3:
         param_grid = {
-            'n_epochs': [5, 10, 20],
-            'clip_range': [0.1, 0.2, 0.3]
+            'target_kl': [None, 0.01, 0.05],
+            'normalize_advantage': [True, False],
+            'max_grad_norm': [0.3, 0.5, 0.7]
         }
     else:
         raise ValueError(f"Invalid grid_id: {grid_id}. Must be 1, 2, or 3.")
@@ -72,7 +81,7 @@ def run_ablation_experiment(grid_id):
     print(f"Total combinations: {len(param_combinations)}")
     
     # Base directory for results
-    base_dir = Path(f"ablation_study_grid_{grid_id}")
+    base_dir = Path(f"ablation_study_advanced_grid_{grid_id}")
     os.makedirs(base_dir, exist_ok=True)
     
     # Store all results
@@ -89,7 +98,7 @@ def run_ablation_experiment(grid_id):
             print(f"Error loading existing results: {e}")
             all_results = {}
     
-    # Create environment config
+    # Create environment config - using 3 maps for a good balance of training speed and diversity
     env_config = {
         "num_scenarios": 3,
     }
@@ -98,7 +107,15 @@ def run_ablation_experiment(grid_id):
     for i, param_values in enumerate(param_combinations):
         # Create parameter dictionary for this run
         params = dict(zip(param_names, param_values))
-        param_str = "_".join([f"{name}_{value}" for name, value in params.items()])
+        
+        # Generate a unique string for this parameter combination
+        if grid_id == 1:
+            # Handle the special case of network architecture
+            arch_str = str(params['policy_arch']).replace(' ', '').replace('[', '').replace(']', '').replace('{', '').replace('}', '').replace(':', '_').replace(',', '_').replace('\'', '')
+            act_str = params['activation_fn'].__name__
+            param_str = f"arch_{arch_str}_act_{act_str}"
+        else:
+            param_str = "_".join([f"{name}_{value}" for name, value in params.items()])
         
         # Check if this combination was already run
         if param_str in all_results:
@@ -108,7 +125,7 @@ def run_ablation_experiment(grid_id):
         print(f"\n=== Running parameter combination {i+1}/{len(param_combinations)}: {param_str} ===")
         
         # Set up experiment directory
-        exp_name = f"ablation_grid{grid_id}_{param_str}"
+        exp_name = f"ablation_grid{grid_id}_{param_str[:50]}"  # Limit length for filesystem
         trial_name = f"{exp_name}_{get_time_str()}_{uuid.uuid4().hex[:6]}"
         trial_dir = base_dir / trial_name
         os.makedirs(trial_dir, exist_ok=True)
@@ -136,8 +153,8 @@ def run_ablation_experiment(grid_id):
         )
         
         # Callback setup
-        save_freq = 10000
-        eval_freq = 50000
+        save_freq = 50000
+        eval_freq = 100000
         
         checkpoint_callback = CheckpointCallback(
             name_prefix="ablation_model",
@@ -157,34 +174,48 @@ def run_ablation_experiment(grid_id):
         
         callbacks = CallbackList([checkpoint_callback, eval_callback])
         
-        # Default parameters
+        # Default parameters - using optimal values from previous ablation
         default_params = {
             'policy': ActorCriticPolicy,
             'env': train_env,
             'n_steps': 128,
             'batch_size': 64,
-            'n_epochs': 10,
+            'n_epochs': 20,  # From previous ablation
             'gamma': 0.99,
             'gae_lambda': 0.95,
-            'learning_rate': 0.0001,
+            'learning_rate': 0.0001,  # From previous ablation
             'clip_range': 0.2,
-            'ent_coef': 0.01,
+            'clip_range_vf': None,
+            'normalize_advantage': True,
+            'ent_coef': 0.01,  # From previous ablation
             'vf_coef': 0.5,
             'max_grad_norm': 0.5,
+            'target_kl': None,
             'tensorboard_log': str(trial_dir),
-            'verbose': 1
+            'verbose': 1,
+            'policy_kwargs': None
         }
         
-        # Update with the specific parameters for this run
-        for name, value in params.items():
-            default_params[name] = value
+        # Handle special grid 1 case (network architecture)
+        if grid_id == 1:
+            policy_arch = params['policy_arch']
+            activation_fn = params['activation_fn']
+            
+            default_params['policy_kwargs'] = dict(
+                net_arch=policy_arch,
+                activation_fn=activation_fn
+            )
+        else:
+            # Update with the specific parameters for this run
+            for name, value in params.items():
+                default_params[name] = value
         
         # Create model
         model = PPO(**default_params)
         
         try:
-            # Train model
-            total_timesteps = 500000  # Increase training time for ablation
+            # Train model - increase training time for better evaluation
+            total_timesteps = 1000000  # 1M steps
             
             model.learn(
                 total_timesteps=total_timesteps,
@@ -236,8 +267,16 @@ def run_ablation_experiment(grid_id):
                 print(f"Error loading evaluation metrics: {e}")
             
             # Save results
+            # Store parameter info in a more readable format
+            param_info = {}
+            if grid_id == 1:
+                param_info['net_arch'] = str(params['policy_arch'])
+                param_info['activation_fn'] = params['activation_fn'].__name__
+            else:
+                param_info = params.copy()
+                
             results = {
-                "params": params,
+                "params": param_info,
                 "validation": {
                     "mean_reward": float(mean_reward),
                     "std_reward": float(std_reward),
@@ -254,7 +293,15 @@ def run_ablation_experiment(grid_id):
         except Exception as e:
             print(f"Error during training/evaluation: {e}")
             # Save error in results
-            all_results[param_str] = {"params": params, "error": str(e)}
+            if grid_id == 1:
+                param_info = {
+                    'net_arch': str(params['policy_arch']),
+                    'activation_fn': params['activation_fn'].__name__
+                }
+            else:
+                param_info = params.copy()
+                
+            all_results[param_str] = {"params": param_info, "error": str(e)}
             np.savez(results_file, results=all_results)
         finally:
             # Clean up
@@ -281,8 +328,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--grid", type=int, required=True, choices=[1, 2, 3],
                        help="Grid ID to run (1, 2, or 3)")
-    parser.add_argument("--map-count", type=int, default=10,
-                       help="Number of maps to use for training")
     args = parser.parse_args()
     
     run_ablation_experiment(args.grid)
