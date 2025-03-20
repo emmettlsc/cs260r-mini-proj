@@ -12,9 +12,10 @@ import numpy as np
 from metadrive.engine.logger import set_log_level
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback, EvalCallback
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, sync_envs_normalization
 from stable_baselines3.ppo import PPO
 from stable_baselines3.ppo.policies import ActorCriticPolicy
+from stable_baselines3.common.evaluation import evaluate_policy
 
 from env import get_training_env, get_validation_env
 
@@ -79,9 +80,6 @@ class CustomizedEvalCallback(EvalCallback):
         PZH Note: Overall this function is copied from original EvalCallback._on_step.
         We additionally record evaluations_info_buffer to the logger.
         """
-
-        from stable_baselines3.common.evaluation import evaluate_policy
-        from stable_baselines3.common.vec_env import sync_envs_normalization
 
         continue_training = True
 
