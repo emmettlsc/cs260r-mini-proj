@@ -447,7 +447,4 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
     
-    # Parse scene counts
-    scene_counts = [int(x) for x in args.scene_counts.split(",")]
-    
     run_generalization_experiment(args.maps, args.seed)
