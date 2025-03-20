@@ -75,6 +75,11 @@ def train_final_agent():
     callbacks = CallbackList([checkpoint_callback, eval_callback])
     
     # Use the optimized parameters from ablation study
+    policy_kwargs = dict(
+        net_arch=[dict(pi=[128, 128], vf=[128, 128])],
+        activation_fn=torch.nn.Tanh
+    )
+    
     model = PPO(
         policy=ActorCriticPolicy,
         env=train_env,
@@ -85,15 +90,18 @@ def train_final_agent():
         gae_lambda=0.95,
         learning_rate=0.0001,
         clip_range=0.2,
+        clip_range_vf=None,
         ent_coef=0.01,
         vf_coef=0.5,
         max_grad_norm=0.5,
+        normalize_advantage=False,
+        target_kl=None,
         tensorboard_log=str(trial_dir),
         verbose=1,
+        policy_kwargs=policy_kwargs
     )
     
-    # Train for much longer
-    total_timesteps = 5_000_000  # 5M steps for final agent
+    total_timesteps = 8_000_000
     
     torch.set_num_threads(64)
     

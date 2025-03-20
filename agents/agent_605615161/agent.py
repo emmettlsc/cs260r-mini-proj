@@ -27,11 +27,13 @@ class Policy:
         # data = torch.load(FOLDER_ROOT / "example_sb3_ppo_agent.pt", weights_only=False)
         data = torch.load(FOLDER_ROOT / "my_agent.pt", weights_only=False, map_location=torch.device('cpu'))
         torch.set_num_threads(64)
+        policy_kwargs = data.get("policy_kwargs", {})
 
         policy = ActorCriticPolicy(
             action_space=data["action_space"],
             observation_space=data["observation_space"],
             lr_schedule=lambda x: 0.0,
+            **policy_kwargs
         )
         missing_keys, unexpected_keys = policy.load_state_dict(data["state_dict"])
         assert not missing_keys, f"Missing keys: {missing_keys}"

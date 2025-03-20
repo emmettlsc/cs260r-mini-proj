@@ -1,4 +1,3 @@
-# generalization_experiment.py
 import argparse
 import datetime
 import logging

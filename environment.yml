@@ -1,4 +1,4 @@
-name: cs260r_miniproject
+name: cs260r_miniproject_test
 channels:
   - defaults
 dependencies:
