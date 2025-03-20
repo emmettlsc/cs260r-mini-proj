@@ -445,11 +445,9 @@ if __name__ == "__main__":
     parser.add_argument("--maps", type=int, choices=[1, 3, 10], required=True, 
                         help="Number of maps to train on (1, 3, or 10)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--scene-counts", type=str, default="1,5,20,50,100,300,1000",
-                        help="Comma-separated list of scene counts to evaluate")
     args = parser.parse_args()
     
     # Parse scene counts
     scene_counts = [int(x) for x in args.scene_counts.split(",")]
     
-    run_generalization_experiment(args.maps, scene_counts, args.seed)
+    run_generalization_experiment(args.maps, args.seed)
